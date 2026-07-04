@@ -1,0 +1,67 @@
+--- a/main.go
++++ b/main.go
+@@ -49,6 +49,8 @@
+ 	MaxOneHopNetwork int
+ 	SeedRelays       []string
+ 	ArchiveKinds     []nostr.Kind
++	PublicWriteRelay bool
++	WriteAllowlist   []string
+ }
+ 
+ var defaultSeedRelays = []string{
+@@ -142,6 +144,12 @@
+ 	pool = nostr.NewPool()
+ 	pool.Context = ctx
+ 	config = LoadConfig()
++	writeAllowlist := make(map[string]bool)
++	for _, key := range config.WriteAllowlist {
++		if len(key) == 64 {
++			writeAllowlist[key] = true
++		}
++	}
+ 
+ 	relay.Info = &nip11.RelayInformationDocument{
+ 		Name:        config.RelayName,
+@@ -183,6 +191,10 @@
+ 				return false, ""
+ 			}
+ 
++			if config.PublicWriteRelay || writeAllowlist[pkHex] {
++				return false, ""
++			}
++
+ 			if !trusted {
+ 				atomic.AddUint64(&rejectedEvents, 1)
+ 				return true, "not in web of trust"
+@@ -287,6 +299,10 @@
+ 		os.Setenv("ARCHIVE_REACTIONS", "FALSE")
+ 	}
+ 
++	if os.Getenv("PUBLIC_WRITE_RELAY") == "" {
++		os.Setenv("PUBLIC_WRITE_RELAY", "FALSE")
++	}
++
+ 	if os.Getenv("MAX_TRUST_NETWORK") == "" {
+ 		os.Setenv("MAX_TRUST_NETWORK", "40000")
+ 	}
+@@ -349,6 +365,11 @@
+ 		}
+ 	}
+ 
++	writeAllowlist := []string{}
++	if wl := os.Getenv("WRITE_ALLOWLIST"); wl != "" {
++		writeAllowlist = splitAndTrim(wl)
++	}
++
+ 	config := Config{
+ 		RelayName:        getEnv("RELAY_NAME"),
+ 		RelayPubkey:      getEnv("RELAY_PUBKEY"),
+@@ -370,6 +391,8 @@
+ 		MaxOneHopNetwork: maxOneHopNetwork,
+ 		SeedRelays:       parsedSeedRelays,
+ 		ArchiveKinds:     parsedArchiveKinds,
++		PublicWriteRelay: getEnv("PUBLIC_WRITE_RELAY") == "TRUE",
++		WriteAllowlist:   writeAllowlist,
+ 	}
+ 
+ 	return config
