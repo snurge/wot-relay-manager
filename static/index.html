@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WoT Relay Manager</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main id="login" class="login">
+    <form id="loginForm" class="panel">
+      <h1>WoT Relay Manager</h1>
+      <label>Username <input name="username" autocomplete="username" required></label>
+      <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+      <button>Sign in</button>
+      <p id="loginError"></p>
+    </form>
+  </main>
+
+  <main id="app" class="app hidden">
+    <header>
+      <div>
+        <h1 id="relayTitle">WoT Relay</h1>
+        <p id="subtitle">Local relay control panel</p>
+      </div>
+      <nav>
+        <button data-tab="overview" class="active">Overview</button>
+        <button data-tab="notes">Notes</button>
+        <button data-tab="settings">Settings</button>
+        <button data-tab="logs">Logs</button>
+        <button id="refresh">Refresh</button>
+        <button id="logout">Logout</button>
+      </nav>
+    </header>
+
+    <section id="overview" class="tab">
+      <div class="grid metrics" id="metrics"></div>
+      <div class="split">
+        <section class="panel">
+          <div class="row between"><h2>Activity</h2><span id="activityLabel"></span></div>
+          <canvas id="chart" height="180"></canvas>
+        </section>
+        <section class="panel">
+          <h2>Service</h2>
+          <dl id="service"></dl>
+          <div class="actions">
+            <button id="restart">Restart relay</button>
+          </div>
+        </section>
+      </div>
+      <div class="split">
+        <section class="panel"><h2>Memory</h2><dl id="memory"></dl></section>
+        <section class="panel"><h2>Network</h2><dl id="network"></dl></section>
+      </div>
+    </section>
+
+    <section id="notes" class="tab hidden">
+      <div class="panel">
+        <div class="toolbar">
+          <input id="noteSearch" placeholder="Search note text">
+          <input id="noteAuthor" placeholder="Author hex pubkey">
+          <select id="noteKind">
+            <option value="">All kinds</option>
+            <option value="1">Kind 1 notes</option>
+            <option value="0">Profiles</option>
+            <option value="3">Follow lists</option>
+            <option value="6">Reposts</option>
+            <option value="7">Reactions</option>
+            <option value="30023">Long-form</option>
+          </select>
+          <button id="loadNotes">Load</button>
+        </div>
+        <div id="notesList" class="notes"></div>
+      </div>
+    </section>
+
+    <section id="settings" class="tab hidden">
+      <form id="settingsForm" class="panel settings">
+        <h2>Relay Settings</h2>
+        <div class="grid formgrid">
+          <label>Relay name <input name="RELAY_NAME"></label>
+          <label>Relay URL <input name="RELAY_URL"></label>
+          <label>Relay contact <input name="RELAY_CONTACT"></label>
+          <label>Relay icon <input name="RELAY_ICON"></label>
+          <label class="wide">Description <input name="RELAY_DESCRIPTION"></label>
+          <label>Refresh hours <input name="REFRESH_INTERVAL_HOURS" type="number" min="1"></label>
+          <label>Minimum followers <input name="MINIMUM_FOLLOWERS" type="number" min="0"></label>
+          <label>Max note age days <input name="MAX_AGE_DAYS" type="number" min="0"></label>
+          <label>Archival relay <select name="ARCHIVAL_SYNC"><option>FALSE</option><option>TRUE</option></select></label>
+          <label>Archive reactions <select name="ARCHIVE_REACTIONS"><option>FALSE</option><option>TRUE</option></select></label>
+          <label>Public write relay <select name="PUBLIC_WRITE_RELAY"><option>FALSE</option><option>TRUE</option></select></label>
+          <label class="wide">Allowed write hex pubkeys <textarea name="WRITE_ALLOWLIST" rows="4"></textarea></label>
+          <label class="wide">Ignored follow pubkeys <textarea name="IGNORE_FOLLOWS_LIST" rows="3"></textarea></label>
+          <label class="wide">Seed relays <textarea name="SEED_RELAYS" rows="3"></textarea></label>
+          <label class="wide">Archive kinds <input name="ARCHIVE_KINDS"></label>
+        </div>
+        <p class="hint">Public write and allowlist controls require the included relay policy patch. Other settings are native wot-relay environment values.</p>
+        <div class="actions">
+          <button>Save settings</button>
+          <button type="button" id="saveRestart">Save and restart</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="logs" class="tab hidden">
+      <pre id="logBox" class="logs"></pre>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>
