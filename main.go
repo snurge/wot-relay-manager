@@ -33,6 +33,8 @@ import (
 //go:embed static/*
 var staticFS embed.FS
 
+var commonFeedKinds = []int{0, 1, 3, 5, 6, 7, 30023, 10000, 10002, 9734, 9735}
+
 type appConfig struct {
 	BindAddr     string
 	RelayHTTP    string
@@ -288,10 +290,16 @@ func (s *server) feed(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 		return
 	}
-	kind := queryInt(r, "kind", 1)
+	kind := strings.TrimSpace(r.URL.Query().Get("kind"))
 	filter := map[string]any{
-		"kinds": []int{kind},
-		"since": time.Now().Unix(),
+		"limit": 25,
+	}
+	if kind != "" {
+		if n, err := strconv.Atoi(kind); err == nil {
+			filter["kinds"] = []int{n}
+		}
+	} else {
+		filter["kinds"] = commonFeedKinds
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -299,60 +307,44 @@ func (s *server) feed(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	writeSSE(w, "status", map[string]string{"status": "connecting"})
 	flusher.Flush()
-
-	ctx, cancel := context.WithCancel(r.Context())
-	defer cancel()
-	c, _, err := websocket.Dial(ctx, s.cfg.RelayWS, nil)
-	if err != nil {
-		writeSSE(w, "error", map[string]string{"error": err.Error()})
-		flusher.Flush()
-		return
-	}
-	defer c.Close(websocket.StatusNormalClosure, "done")
-
-	sub := "feed-" + strconv.FormatInt(time.Now().UnixNano(), 36)
-	msg, _ := json.Marshal([]any{"REQ", sub, filter})
-	if err := c.Write(ctx, websocket.MessageText, msg); err != nil {
-		writeSSE(w, "error", map[string]string{"error": err.Error()})
-		flusher.Flush()
-		return
-	}
 	writeSSE(w, "status", map[string]string{"status": "listening"})
 	flusher.Flush()
 
-	heartbeat := time.NewTicker(25 * time.Second)
-	defer heartbeat.Stop()
+	seen := map[string]bool{}
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
+
+	emit := func() {
+		events, err := queryRelay(s.cfg.RelayWS, filter, 5*time.Second)
+		if err != nil {
+			writeSSE(w, "error", map[string]string{"error": err.Error()})
+			flusher.Flush()
+			return
+		}
+		sort.Slice(events, func(i, j int) bool {
+			return eventTimestamp(events[i]) < eventTimestamp(events[j])
+		})
+		for _, ev := range events {
+			id, _ := ev["id"].(string)
+			if id == "" || seen[id] {
+				continue
+			}
+			seen[id] = true
+			writeSSE(w, "note", ev)
+			flusher.Flush()
+		}
+	}
+
+	emit()
 	for {
 		select {
-		case <-ctx.Done():
+		case <-r.Context().Done():
 			return
-		case <-heartbeat.C:
+		case <-ticker.C:
+			emit()
+		case <-time.After(25 * time.Second):
 			fmt.Fprint(w, ": keepalive\n\n")
 			flusher.Flush()
-		default:
-			readCtx, cancelRead := context.WithTimeout(ctx, 2*time.Second)
-			_, data, err := c.Read(readCtx)
-			cancelRead()
-			if err != nil {
-				if ctx.Err() != nil {
-					return
-				}
-				continue
-			}
-			var frame []json.RawMessage
-			if json.Unmarshal(data, &frame) != nil || len(frame) < 3 {
-				continue
-			}
-			var typ string
-			json.Unmarshal(frame[0], &typ)
-			if typ != "EVENT" {
-				continue
-			}
-			var ev map[string]any
-			if json.Unmarshal(frame[2], &ev) == nil {
-				writeSSE(w, "note", ev)
-				flusher.Flush()
-			}
 		}
 	}
 }
@@ -379,7 +371,7 @@ func queryRelay(relayURL string, filter map[string]any, timeout time.Duration) (
 	for {
 		_, data, err := c.Read(ctx)
 		if err != nil {
-			if len(events) > 0 {
+			if ctx.Err() != nil || len(events) > 0 {
 				return events, nil
 			}
 			return nil, err
@@ -399,6 +391,22 @@ func queryRelay(relayURL string, filter map[string]any, timeout time.Duration) (
 				events = append(events, ev)
 			}
 		}
+	}
+}
+
+func eventTimestamp(ev map[string]any) int64 {
+	switch v := ev["created_at"].(type) {
+	case float64:
+		return int64(v)
+	case int64:
+		return v
+	case int:
+		return int64(v)
+	case json.Number:
+		n, _ := v.Int64()
+		return n
+	default:
+		return 0
 	}
 }
 
