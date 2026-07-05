@@ -4,6 +4,15 @@ Lightweight local-only management and analytics panel for `barrydeen/wot-relay` 
 
 It runs as a separate service on `127.0.0.1:4781`, reads the relay debug endpoint on `127.0.0.1:3334`, edits `/etc/systemd/system/wot-relay.env`, restarts `wot-relay.service`, reads recent journal activity, and browses stored notes through the relay's local WebSocket.
 
+## Features
+
+- Relay activity metrics from `/debug/stats`
+- Service status, memory, CPU, task count, and database disk usage
+- Journal-derived activity chart with labeled per-minute axes
+- Stored note browsing by kind, author, and text search
+- Live note feed for new events passing through the relay
+- Relay environment editor with restart control
+
 ## Install
 
 Upload this folder to the VPS, then run:
