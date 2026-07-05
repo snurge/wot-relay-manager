@@ -25,7 +25,8 @@
       </div>
       <nav>
         <button data-tab="overview" class="active">Overview</button>
-        <button data-tab="notes">Notes</button>
+        <button data-tab="search">Search</button>
+        <button data-tab="live">Live</button>
         <button data-tab="settings">Settings</button>
         <button data-tab="logs">Logs</button>
         <button id="refresh">Refresh</button>
@@ -54,11 +55,11 @@
       </div>
     </section>
 
-    <section id="notes" class="tab hidden">
+    <section id="search" class="tab hidden">
       <div class="panel">
         <div class="toolbar">
           <input id="noteSearch" placeholder="Search note text">
-          <input id="noteAuthor" placeholder="Author hex pubkey">
+          <input id="noteAuthor" placeholder="Author npub1...">
           <select id="noteKind">
             <option value="">All kinds</option>
             <option value="1">Kind 1 notes</option>
@@ -68,22 +69,34 @@
             <option value="7">Reactions</option>
             <option value="30023">Long-form</option>
           </select>
-          <button id="loadNotes">Load</button>
+          <button id="loadNotes">Search</button>
         </div>
+        <div id="notesList" class="notes"></div>
+      </div>
+    </section>
+
+    <section id="live" class="tab hidden">
+      <div class="panel">
         <div class="livebar">
           <div>
             <h2>Live Feed</h2>
             <p id="feedStatus">Stopped</p>
           </div>
-          <div class="actions tight">
-            <button id="startFeed" type="button">Start live feed</button>
+          <div class="toolbar livecontrols">
+            <select id="feedKind">
+              <option value="1">Kind 1 notes</option>
+              <option value="0">Profiles</option>
+              <option value="3">Follow lists</option>
+              <option value="6">Reposts</option>
+              <option value="7">Reactions</option>
+              <option value="30023">Long-form</option>
+            </select>
+            <button id="startFeed" type="button">Start</button>
             <button id="stopFeed" type="button">Stop</button>
             <button id="clearFeed" type="button">Clear</button>
           </div>
         </div>
         <div id="liveFeed" class="notes livefeed"></div>
-        <h2 class="sectionTitle">Browse Stored Notes</h2>
-        <div id="notesList" class="notes"></div>
       </div>
     </section>
 
