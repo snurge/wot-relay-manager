@@ -77,10 +77,25 @@ dl { display: grid; grid-template-columns: 150px 1fr; gap: 8px 12px; margin: 12p
 dt { color: var(--muted); }
 dd { margin: 0; overflow-wrap: anywhere; }
 .actions { display: flex; gap: 8px; margin-top: 14px; }
+.actions.tight { margin-top: 0; }
 .toolbar { display: grid; grid-template-columns: 1.2fr 1.2fr 180px auto; gap: 10px; margin-bottom: 14px; }
+canvas { width: 100%; display: block; }
+.livebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 12px 0;
+  margin: 4px 0 12px;
+}
+.livebar p { color: var(--muted); }
+.sectionTitle { margin: 16px 0 10px; }
 .notes { display: grid; gap: 10px; }
+.livefeed { max-height: 360px; overflow: auto; margin-bottom: 8px; }
 .note { background: #121922; border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
-.note header { margin: 0 0 8px; display: flex; font-size: 12px; color: var(--muted); }
+.note header { margin: 0 0 8px; display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
 .note pre { white-space: pre-wrap; word-break: break-word; margin: 0; color: var(--text); }
 .formgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .wide { grid-column: 1 / -1; }
@@ -98,5 +113,6 @@ dd { margin: 0; overflow-wrap: anywhere; }
   header, .split { grid-template-columns: 1fr; display: grid; }
   nav { justify-content: start; }
   .metrics, .formgrid, .toolbar { grid-template-columns: 1fr; }
+  .livebar { align-items: stretch; display: grid; }
   dl { grid-template-columns: 1fr; }
 }
