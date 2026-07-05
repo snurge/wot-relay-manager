@@ -163,7 +163,7 @@ function drawChart(points) {
   ctx.restore();
   $('#activityLabel').textContent = `${points.length} journal samples, y-axis is per-minute count`;
   function drawLine(vals, color) {
-    ctx.strokeStyle = color; ctx.lineWidth = 2 * devicePixelRatio; ctx.beginPath();
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath();
     vals.forEach((v, i) => {
       const x = pad.left + (plotW / (vals.length - 1)) * i;
       const y = pad.top + plotH - (Number(v) / max) * plotH;
