@@ -1,6 +1,7 @@
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 let state = {};
+let feedSource = null;
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {headers: {'Content-Type': 'application/json'}, ...opts});
@@ -31,6 +32,7 @@ $$('nav [data-tab]').forEach(btn => btn.onclick = () => {
   btn.classList.add('active');
   $$('.tab').forEach(t => t.classList.add('hidden'));
   $('#' + btn.dataset.tab).classList.remove('hidden');
+  if (btn.dataset.tab === 'overview') requestAnimationFrame(() => drawChart(state.performance || []));
   if (btn.dataset.tab === 'logs') loadLogs();
 });
 
@@ -86,7 +88,7 @@ function renderOverview() {
     'Network refreshes': state.stats?.Refreshes?.['Network Refreshes'],
     'Profile refreshes': state.stats?.Refreshes?.['Profile Refreshes'],
   });
-  drawChart(state.performance || []);
+  requestAnimationFrame(() => drawChart(state.performance || []));
 }
 
 function metric(label, value) {
@@ -109,29 +111,73 @@ const kb = v => v ? bytes(Number(v) * 1024) : 'n/a';
 const ns = v => v ? `${(Number(v) / 1e9 / 60).toFixed(1)} min` : 'n/a';
 
 function drawChart(points) {
-  const c = $('#chart'), ctx = c.getContext('2d'), w = c.width = c.clientWidth * devicePixelRatio, h = c.height = 180 * devicePixelRatio;
+  const c = $('#chart'), ctx = c.getContext('2d');
+  const rect = c.getBoundingClientRect();
+  const cssW = Math.max(320, Math.floor(rect.width || c.parentElement.clientWidth || 720));
+  const cssH = 220;
+  const dpr = window.devicePixelRatio || 1;
+  const w = c.width = cssW * dpr;
+  const h = c.height = cssH * dpr;
+  c.style.height = `${cssH}px`;
   ctx.clearRect(0, 0, w, h);
+  ctx.save();
+  ctx.scale(dpr, dpr);
+  const pad = {left: 44, right: 14, top: 24, bottom: 34};
+  const plotW = cssW - pad.left - pad.right;
+  const plotH = cssH - pad.top - pad.bottom;
+  const series = [
+    {key: 'events', label: 'Events/min', color: '#55d6a5'},
+    {key: 'rejected', label: 'Rejected/min', color: '#ef6b73'},
+    {key: 'archived', label: 'Archived/min', color: '#f2bc5e'},
+  ];
+  const max = niceMax(Math.max(1, ...points.flatMap(p => series.map(s => Number(p[s.key] || 0)))));
+  ctx.font = '12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.textBaseline = 'middle';
   ctx.strokeStyle = '#343c48';
   ctx.lineWidth = 1;
-  for (let i = 0; i < 5; i++) {
-    const y = (h / 4) * i;
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+  ctx.fillStyle = '#9eacb7';
+  for (let i = 0; i <= 4; i++) {
+    const value = Math.round(max - (max / 4) * i);
+    const y = pad.top + (plotH / 4) * i;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + plotW, y); ctx.stroke();
+    ctx.fillText(String(value), 8, y);
   }
-  const max = Math.max(1, ...points.map(p => Math.max(p.events, p.rejected, p.archived)));
-  drawLine(points.map(p => p.events), '#55d6a5', max);
-  drawLine(points.map(p => p.rejected), '#ef6b73', max);
-  drawLine(points.map(p => p.archived), '#f2bc5e', max);
-  $('#activityLabel').textContent = `${points.length} journal samples`;
-  function drawLine(vals, color, max) {
-    if (vals.length < 2) return;
+  ctx.beginPath(); ctx.moveTo(pad.left, pad.top); ctx.lineTo(pad.left, pad.top + plotH); ctx.lineTo(pad.left + plotW, pad.top + plotH); ctx.stroke();
+  series.forEach((s, i) => {
+    const x = pad.left + i * 112;
+    ctx.fillStyle = s.color; ctx.fillRect(x, 8, 10, 10);
+    ctx.fillStyle = '#eef3f6'; ctx.fillText(s.label, x + 16, 13);
+  });
+  if (points.length < 2) {
+    ctx.fillStyle = '#9eacb7';
+    ctx.textAlign = 'center';
+    ctx.fillText('Waiting for journal samples', pad.left + plotW / 2, pad.top + plotH / 2);
+  } else {
+    series.forEach(s => drawLine(points.map(p => Number(p[s.key] || 0)), s.color));
+    ctx.fillStyle = '#9eacb7';
+    ctx.textAlign = 'left';
+    ctx.fillText('oldest', pad.left, pad.top + plotH + 22);
+    ctx.textAlign = 'right';
+    ctx.fillText('latest', pad.left + plotW, pad.top + plotH + 22);
+  }
+  ctx.restore();
+  $('#activityLabel').textContent = `${points.length} journal samples, y-axis is per-minute count`;
+  function drawLine(vals, color) {
     ctx.strokeStyle = color; ctx.lineWidth = 2 * devicePixelRatio; ctx.beginPath();
     vals.forEach((v, i) => {
-      const x = (w / (vals.length - 1)) * i;
-      const y = h - (Number(v) / max) * (h - 12 * devicePixelRatio) - 6 * devicePixelRatio;
+      const x = pad.left + (plotW / (vals.length - 1)) * i;
+      const y = pad.top + plotH - (Number(v) / max) * plotH;
       i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
     });
     ctx.stroke();
   }
+}
+
+function niceMax(n) {
+  const pow = Math.pow(10, Math.floor(Math.log10(n)));
+  const scaled = n / pow;
+  const nice = scaled <= 2 ? 2 : scaled <= 5 ? 5 : 10;
+  return nice * pow;
 }
 
 function renderSettings() {
@@ -153,6 +199,36 @@ async function saveSettings(restart) {
 }
 
 $('#loadNotes').onclick = loadNotes;
+$('#startFeed').onclick = startFeed;
+$('#stopFeed').onclick = stopFeed;
+$('#clearFeed').onclick = () => $('#liveFeed').innerHTML = '';
+
+function startFeed() {
+  stopFeed();
+  const kind = $('#noteKind').value || '1';
+  feedSource = new EventSource('/api/feed?kind=' + encodeURIComponent(kind));
+  $('#feedStatus').textContent = `Listening for kind ${kind} notes`;
+  feedSource.addEventListener('note', (event) => {
+    const ev = JSON.parse(event.data);
+    prependLiveNote(ev);
+  });
+  feedSource.addEventListener('error', () => {
+    $('#feedStatus').textContent = 'Connection interrupted; retrying';
+  });
+}
+
+function stopFeed() {
+  if (feedSource) feedSource.close();
+  feedSource = null;
+  $('#feedStatus').textContent = 'Stopped';
+}
+
+function prependLiveNote(ev) {
+  const feed = $('#liveFeed');
+  feed.insertAdjacentHTML('afterbegin', noteCard(ev));
+  while (feed.children.length > 40) feed.lastElementChild.remove();
+}
+
 async function loadNotes() {
   const qs = new URLSearchParams({
     search: $('#noteSearch').value,
