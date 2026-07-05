@@ -253,7 +253,12 @@ func (s *server) notes(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if author != "" {
-		filter["authors"] = []string{author}
+		hexAuthor, err := normalizePubkey(author)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		filter["authors"] = []string{hexAuthor}
 	}
 	events, err := queryRelay(s.cfg.RelayWS, filter, 6*time.Second)
 	if err != nil {
@@ -292,6 +297,7 @@ func (s *server) feed(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.WriteHeader(http.StatusOK)
+	writeSSE(w, "status", map[string]string{"status": "connecting"})
 	flusher.Flush()
 
 	ctx, cancel := context.WithCancel(r.Context())
@@ -311,6 +317,8 @@ func (s *server) feed(w http.ResponseWriter, r *http.Request) {
 		flusher.Flush()
 		return
 	}
+	writeSSE(w, "status", map[string]string{"status": "listening"})
+	flusher.Flush()
 
 	heartbeat := time.NewTicker(25 * time.Second)
 	defer heartbeat.Stop()
@@ -392,6 +400,125 @@ func queryRelay(relayURL string, filter map[string]any, timeout time.Duration) (
 			}
 		}
 	}
+}
+
+func normalizePubkey(input string) (string, error) {
+	input = strings.TrimSpace(strings.ToLower(input))
+	if input == "" {
+		return "", errors.New("empty pubkey")
+	}
+	if strings.HasPrefix(input, "npub1") {
+		return npubToHex(input)
+	}
+	if len(input) == 64 {
+		if _, err := hex.DecodeString(input); err == nil {
+			return input, nil
+		}
+	}
+	return "", errors.New("author must be npub1... or a 64-character hex pubkey")
+}
+
+func npubToHex(npub string) (string, error) {
+	hrp, data, err := bech32Decode(npub)
+	if err != nil {
+		return "", err
+	}
+	if hrp != "npub" {
+		return "", errors.New("author must use npub prefix")
+	}
+	decoded, err := convertBits(data, 5, 8, false)
+	if err != nil {
+		return "", err
+	}
+	if len(decoded) != 32 {
+		return "", errors.New("npub did not decode to a 32-byte pubkey")
+	}
+	return hex.EncodeToString(decoded), nil
+}
+
+func bech32Decode(s string) (string, []byte, error) {
+	const charset = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+	if strings.ToLower(s) != s {
+		return "", nil, errors.New("npub must be lowercase")
+	}
+	pos := strings.LastIndexByte(s, '1')
+	if pos < 1 || pos+7 > len(s) {
+		return "", nil, errors.New("invalid npub format")
+	}
+	hrp := s[:pos]
+	chars := s[pos+1:]
+	values := make([]byte, len(chars))
+	for i, r := range chars {
+		idx := strings.IndexRune(charset, r)
+		if idx < 0 {
+			return "", nil, errors.New("invalid npub character")
+		}
+		values[i] = byte(idx)
+	}
+	if !bech32VerifyChecksum(hrp, values) {
+		return "", nil, errors.New("invalid npub checksum")
+	}
+	return hrp, values[:len(values)-6], nil
+}
+
+func bech32VerifyChecksum(hrp string, data []byte) bool {
+	values := append(bech32HrpExpand(hrp), data...)
+	return bech32Polymod(values) == 1
+}
+
+func bech32HrpExpand(hrp string) []byte {
+	out := make([]byte, 0, len(hrp)*2+1)
+	for _, r := range hrp {
+		out = append(out, byte(r>>5))
+	}
+	out = append(out, 0)
+	for _, r := range hrp {
+		out = append(out, byte(r&31))
+	}
+	return out
+}
+
+func bech32Polymod(values []byte) uint32 {
+	generator := []uint32{0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3}
+	chk := uint32(1)
+	for _, v := range values {
+		top := chk >> 25
+		chk = (chk&0x1ffffff)<<5 ^ uint32(v)
+		for i := 0; i < 5; i++ {
+			if (top>>i)&1 == 1 {
+				chk ^= generator[i]
+			}
+		}
+	}
+	return chk
+}
+
+func convertBits(data []byte, fromBits, toBits uint, pad bool) ([]byte, error) {
+	acc := uint(0)
+	bits := uint(0)
+	maxv := uint((1 << toBits) - 1)
+	maxAcc := uint((1 << (fromBits + toBits - 1)) - 1)
+	out := []byte{}
+	for _, value := range data {
+		v := uint(value)
+		if v>>fromBits != 0 {
+			return nil, errors.New("invalid bech32 data range")
+		}
+		acc = ((acc << fromBits) | v) & maxAcc
+		bits += fromBits
+		for bits >= toBits {
+			bits -= toBits
+			out = append(out, byte((acc>>bits)&maxv))
+		}
+	}
+	if pad {
+		if bits > 0 {
+			out = append(out, byte((acc<<(toBits-bits))&maxv))
+		}
+	} else if bits >= fromBits || ((acc<<(toBits-bits))&maxv) != 0 {
+		return nil, errors.New("invalid npub padding")
+	}
+	return out, nil
 }
 
 func httpGet(target string) (string, error) {
