@@ -160,8 +160,9 @@ function drawChart(points) {
     ctx.textAlign = 'right';
     ctx.fillText('latest', pad.left + plotW, pad.top + plotH + 22);
   }
+  drawXAxisLabels(points.length);
   ctx.restore();
-  $('#activityLabel').textContent = `${points.length} journal samples, y-axis is per-minute count`;
+  $('#activityLabel').textContent = `${points.length} journal samples; x-axis is sample number, y-axis is per-minute count`;
   function drawLine(vals, color) {
     ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath();
     vals.forEach((v, i) => {
@@ -170,6 +171,17 @@ function drawChart(points) {
       i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
     });
     ctx.stroke();
+  }
+  function drawXAxisLabels(count) {
+    const labels = count > 1 ? 5 : 1;
+    ctx.fillStyle = '#9eacb7';
+    ctx.textAlign = 'center';
+    for (let i = 0; i < labels; i++) {
+      const ratio = labels === 1 ? 0 : i / (labels - 1);
+      const sample = count <= 1 ? 1 : Math.max(1, Math.round(1 + ratio * (count - 1)));
+      const x = pad.left + ratio * plotW;
+      ctx.fillText(String(sample), x, pad.top + plotH + 10);
+    }
   }
 }
 
@@ -205,9 +217,14 @@ $('#clearFeed').onclick = () => $('#liveFeed').innerHTML = '';
 
 function startFeed() {
   stopFeed();
-  const kind = $('#noteKind').value || '1';
+  $('#liveFeed').innerHTML ||= '<p class="emptyState">Waiting for new relay events...</p>';
+  const kind = $('#feedKind').value || '1';
   feedSource = new EventSource('/api/feed?kind=' + encodeURIComponent(kind));
-  $('#feedStatus').textContent = `Listening for kind ${kind} notes`;
+  $('#feedStatus').textContent = `Connecting for kind ${kind} events`;
+  feedSource.addEventListener('status', (event) => {
+    const msg = JSON.parse(event.data);
+    $('#feedStatus').textContent = `${msg.status} for kind ${kind} events`;
+  });
   feedSource.addEventListener('note', (event) => {
     const ev = JSON.parse(event.data);
     prependLiveNote(ev);
@@ -225,6 +242,7 @@ function stopFeed() {
 
 function prependLiveNote(ev) {
   const feed = $('#liveFeed');
+  if (feed.querySelector('.emptyState')) feed.innerHTML = '';
   feed.insertAdjacentHTML('afterbegin', noteCard(ev));
   while (feed.children.length > 40) feed.lastElementChild.remove();
 }
