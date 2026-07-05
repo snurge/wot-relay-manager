@@ -73,6 +73,7 @@ func main() {
 	mux.HandleFunc("/api/config", s.auth(s.config))
 	mux.HandleFunc("/api/restart", s.auth(s.restart))
 	mux.HandleFunc("/api/notes", s.auth(s.notes))
+	mux.HandleFunc("/api/feed", s.auth(s.feed))
 	mux.HandleFunc("/api/logs", s.auth(s.logs))
 
 	log.Printf("wot-relay-manager listening on http://%s", cfg.BindAddr)
@@ -270,6 +271,82 @@ func (s *server) notes(w http.ResponseWriter, r *http.Request) {
 		events = filtered
 	}
 	writeJSON(w, map[string]any{"events": events})
+}
+
+func (s *server) feed(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	kind := queryInt(r, "kind", 1)
+	filter := map[string]any{
+		"kinds": []int{kind},
+		"since": time.Now().Unix(),
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	c, _, err := websocket.Dial(ctx, s.cfg.RelayWS, nil)
+	if err != nil {
+		writeSSE(w, "error", map[string]string{"error": err.Error()})
+		flusher.Flush()
+		return
+	}
+	defer c.Close(websocket.StatusNormalClosure, "done")
+
+	sub := "feed-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	msg, _ := json.Marshal([]any{"REQ", sub, filter})
+	if err := c.Write(ctx, websocket.MessageText, msg); err != nil {
+		writeSSE(w, "error", map[string]string{"error": err.Error()})
+		flusher.Flush()
+		return
+	}
+
+	heartbeat := time.NewTicker(25 * time.Second)
+	defer heartbeat.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-heartbeat.C:
+			fmt.Fprint(w, ": keepalive\n\n")
+			flusher.Flush()
+		default:
+			readCtx, cancelRead := context.WithTimeout(ctx, 2*time.Second)
+			_, data, err := c.Read(readCtx)
+			cancelRead()
+			if err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				continue
+			}
+			var frame []json.RawMessage
+			if json.Unmarshal(data, &frame) != nil || len(frame) < 3 {
+				continue
+			}
+			var typ string
+			json.Unmarshal(frame[0], &typ)
+			if typ != "EVENT" {
+				continue
+			}
+			var ev map[string]any
+			if json.Unmarshal(frame[2], &ev) == nil {
+				writeSSE(w, "note", ev)
+				flusher.Flush()
+			}
+		}
+	}
 }
 
 func queryRelay(relayURL string, filter map[string]any, timeout time.Duration) ([]map[string]any, error) {
@@ -528,4 +605,9 @@ func clampInt(n, lo, hi int) int {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v)
+}
+
+func writeSSE(w io.Writer, event string, v any) {
+	data, _ := json.Marshal(v)
+	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, data)
 }
