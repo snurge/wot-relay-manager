@@ -70,6 +70,19 @@
           </select>
           <button id="loadNotes">Load</button>
         </div>
+        <div class="livebar">
+          <div>
+            <h2>Live Feed</h2>
+            <p id="feedStatus">Stopped</p>
+          </div>
+          <div class="actions tight">
+            <button id="startFeed" type="button">Start live feed</button>
+            <button id="stopFeed" type="button">Stop</button>
+            <button id="clearFeed" type="button">Clear</button>
+          </div>
+        </div>
+        <div id="liveFeed" class="notes livefeed"></div>
+        <h2 class="sectionTitle">Browse Stored Notes</h2>
         <div id="notesList" class="notes"></div>
       </div>
     </section>
