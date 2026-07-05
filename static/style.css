@@ -79,6 +79,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .actions { display: flex; gap: 8px; margin-top: 14px; }
 .actions.tight { margin-top: 0; }
 .toolbar { display: grid; grid-template-columns: 1.2fr 1.2fr 180px auto; gap: 10px; margin-bottom: 14px; }
+.livecontrols { grid-template-columns: 180px auto auto auto; margin-bottom: 0; }
 canvas { width: 100%; display: block; }
 .livebar {
   display: flex;
@@ -93,7 +94,8 @@ canvas { width: 100%; display: block; }
 .livebar p { color: var(--muted); }
 .sectionTitle { margin: 16px 0 10px; }
 .notes { display: grid; gap: 10px; }
-.livefeed { max-height: 360px; overflow: auto; margin-bottom: 8px; }
+.livefeed { max-height: 520px; overflow: auto; margin-bottom: 8px; }
+.emptyState { color: var(--muted); padding: 12px; border: 1px dashed var(--line); border-radius: 8px; }
 .note { background: #121922; border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
 .note header { margin: 0 0 8px; display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
 .note pre { white-space: pre-wrap; word-break: break-word; margin: 0; color: var(--text); }
@@ -112,7 +114,7 @@ canvas { width: 100%; display: block; }
 @media (max-width: 860px) {
   header, .split { grid-template-columns: 1fr; display: grid; }
   nav { justify-content: start; }
-  .metrics, .formgrid, .toolbar { grid-template-columns: 1fr; }
+  .metrics, .formgrid, .toolbar, .livecontrols { grid-template-columns: 1fr; }
   .livebar { align-items: stretch; display: grid; }
   dl { grid-template-columns: 1fr; }
 }
